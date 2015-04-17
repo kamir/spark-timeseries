@@ -37,7 +37,7 @@ public class StockDataLoader {
 
     private static final Logger LOG = Logger.getLogger(StockDataLoader.class.getName());
 
-    private static void loadCacheYears(int[] years) {
+    private static void loadAndCacheDataForYears(int[] years) {
         
         String column = "Close";
         String label = "UK.csv";
@@ -141,7 +141,7 @@ public class StockDataLoader {
 //        int[] years = {2011,2012,2013,2014};
         int[] years = {1999, 2003, 2010};
 
-        loadCacheYears( years );
+        loadAndCacheDataForYears( years );
         
         /**
          * Example 1: Load the Close price for 2012 from web and cache locally
@@ -166,13 +166,14 @@ public class StockDataLoader {
 //        }
 //        System.out.println("> Total Errors: " + i);
 
-//        /**
-//         * Now we extract other columns from local files ...
-//         */
-//        StockDataLoader sdl = StockDataLoader.getLocalLoader("2012-01-01", "2012-12-31", label);
-//        sdl.initColumn("Close");
-//        sdl.showCharts();
-//
+        /**
+         * Now we extract other columns from local files ...
+         */
+        int year = 2010;
+        StockDataLoader sdl = StockDataLoader.getLocalLoader( year + "-01-01", year + "-12-31", label);
+        sdl.initColumn("Close");
+        sdl.showCharts();
+
 //        StockDataLoader sdl2 = StockDataLoader.getLocalLoader("2012-01-01", "2012-12-31", label);
 //        sdl2.initColumn("Adj_Close");
 //        sdl2.showCharts();
