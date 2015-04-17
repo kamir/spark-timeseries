@@ -61,6 +61,11 @@ Statistical Functionality
 * Augmented Dickey-Fuller test
 * Durbin-Watson test
 
+### Time Series Generators
+
+* Multimode-Oszillator with optional noise
+* Long-range correlated time series
+
 ### General Prob / Stats
 
 * Multivariate T Distribution
