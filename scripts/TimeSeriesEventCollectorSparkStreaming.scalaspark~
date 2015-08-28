@@ -1,0 +1,118 @@
+// --------------------------------------------
+// Within a time window we only collect scalar labeled values.
+// The label tells us, what metric we work with.
+//
+// NO time resolution within the window!!!
+//
+// Definition: End of the time windows gives us the time stamp for the individual 
+// measurement.
+// --------------------------------------------
+//
+// Here we create time series from events.
+//
+// Event:                 time stamp, spontaneous
+// Event of measurement:  time stamp calculated form event index, and measurement metadata
+//                        well defined, known context
+// Event in model:        spontaneously (random simulation) or well defined time stamp
+//                        value depends on model and selected parameters.
+//
+// For a time series we need to know the system time to calculate the time stampe
+// for each event of measurement.
+//
+// We aggregate events to make a contectualized time series.
+//
+//   tst = time stamp
+//   v = scalar value
+//
+//    (location.metric, [ (tst,v), (tst,v), ... ]
+//    
+//    (label, [ (tst,v), (tst,v), ... ]
+//
+// How-To use it:
+// --------------
+//
+// - start the shell with this command:
+//      spark-shell --master local[2]
+//
+// * if NN is in safe mode run: 
+//      hadoop dfsadmin -safemode leave
+//
+// - load the scala script via:
+//      :load SCRIPTNAME
+//      :load TimeSeriesEventCollectorSparkStreaming.scalaspark
+//
+// - in a separate terminal
+//      nc -lkv 1234
+//
+// enter some data in format: metric,value metric,value
+//      b,1 a,3 c,4 f,5 g,6 h,7 h,8 h,8 a,10 b,11
+//      x,18 f,22 h,99
+//
+//
+
+// Dataset management:
+//
+//   We consider one streaming context as the exclusive source for one data set. As long as the tool runs perfect
+//   we can see one folder for each "batch interval". Only if the process fails, we miss folders or we would not have
+//   the _SUCCESS marker files.
+//
+//   RAW output is of this format:
+//
+//   (a,ArrayBuffer((a,(1440766164000 ms,4))))
+//   (b,ArrayBuffer((b,(1440766164000 ms,3))))
+//   (c,ArrayBuffer((c,(1440766164000 ms,7))))
+//
+//   Some longer batch sizes lead to this outpu:
+//   (d,ArrayBuffer((d,(1440767880000 ms,4)), (d,(1440767880000 ms,9)), (d,(1440767880000 ms,11)), (d,(1440767880000 ms,8))))
+//   (a,ArrayBuffer((a,(1440767880000 ms,1)), (a,(1440767880000 ms,5)), (a,(1440767880000 ms,3)), (a,(1440767880000 ms,2)), (a,(1440767880000 ms,8)), (a,(1440767880000 ms,199))))
+//   (b,ArrayBuffer((b,(1440767880000 ms,2)), (b,(1440767880000 ms,6)), (b,(1440767880000 ms,5)), (b,(1440767880000 ms,9)), (b,(1440767880000 ms,9)), (b,(1440767880000 ms,99)), (b,(1440767880000 ms,19)), (b,(1440767880000 ms,9999))))
+//   (c,ArrayBuffer((c,(1440767880000 ms,3)), (c,(1440767880000 ms,8)), (c,(1440767880000 ms,99)), (c,(1440767880000 ms,998)), (c,(1440767880000 ms,99))))
+//    
+//   We can clearly see, no time resolution within the interval, but no event gets lost.
+//   Aggregation and quality tests can be done on the RDD called mtv.
+
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.Seconds
+
+val ssc = new StreamingContext(sc,Seconds(60))
+
+val mystream = ssc.socketTextStream("localhost",1234)
+
+val points = mystream.flatMap(line => line.split(" "))
+
+val mvP = points.map(points => ( points.split(",")(0),points.split(",")(1)) ) 
+// here I made a mistake !!!   points.map works  but: mystream.map would work on the wrong data ...
+
+// weave in the time ...
+val mtv = mvP.transform( (rdd,time) => rdd.map( v => (v._1,(time,v._2)) ).keyBy( x => x._1 ).groupByKey() )
+
+// Print out the count of each batch RDD in the stream
+mtv.foreachRDD(rdd => println("Number of ts in the RDD requests: ", rdd.count()))
+
+// Save the filters logs
+// mtv.saveAsTextFiles("file:/home/training/exercises/ets/raw")
+
+// Filename convention:
+//                                          ets.BS/raw-CONTEXTID
+//     BS:         batch size in seconds
+//     CONTEXTID:  URI-snippet with reference to etosha-node
+//
+// Example:
+//     mtv.saveAsTextFiles("hdfs:/user/training/ets.60/raw-www.semanpix.de___DEMO")
+//
+//     * we collect events with batch size 60 s for a dataset, documented in 
+//       the www.semanpix.de/opendata/wiki on Wikipage DEMO_TS_EventCollector
+//
+
+mtv.saveAsTextFiles("hdfs:/user/training/ets.60/raw-www.semanpix.de___DEMO_TS_EventCollector")
+mtv.print()
+
+sys.ShutdownHookThread {
+      println(">>> Gracefully stopping Spark Streaming Application")
+      ssc.stop(true, true)
+      println(">>> Application stopped. (OK)")
+}
+
+ssc.start()
+ssc.awaitTermination()
